@@ -1,5 +1,6 @@
 # encoding: utf-8
 from flask import Flask, request, jsonify
+from loguru import logger
 from apis.xhs_pc_apis import XHS_Apis
 from xhs_utils.data_util import handle_note_info, handle_comment_info
 
@@ -56,8 +57,8 @@ def api_get_user_notes():
                 note_data = res_json['data']['items'][0]
                 note_data['url'] = note_url
                 detailed_notes.append(handle_note_info(note_data))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f'获取笔记详情失败: {e}')
     return success_response(detailed_notes)
 
 
@@ -87,8 +88,8 @@ def api_search_note():
                 note_data = res_json['data']['items'][0]
                 note_data['url'] = note_url
                 detailed_notes.append(handle_note_info(note_data))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f'获取笔记详情失败: {e}')
     return success_response(detailed_notes)
 
 
