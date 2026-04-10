@@ -93,8 +93,50 @@ def api_search_note():
     return success_response(detailed_notes)
 
 
-@app.route('/api/note/comments', methods=['POST'])
-def api_get_note_comments():
+@app.route('/api/note/comments/page', methods=['POST'])
+def api_get_note_comments_page():
+    data = request.get_json()
+    if not data or 'cookie' not in data or 'note_id' not in data or 'xsec_token' not in data:
+        return error_response('missing required fields: cookie, note_id, xsec_token')
+    cookie = data['cookie']
+    note_id = data['note_id']
+    xsec_token = data['xsec_token']
+    cursor = data.get('cursor', '')
+    success, msg, res_json = xhs_apis.get_note_out_comment(note_id, cursor, xsec_token, cookie)
+    if not success:
+        return error_response(msg)
+    note_url = f"https://www.xiaohongshu.com/explore/{note_id}?xsec_token={xsec_token}"
+    comments = res_json.get('data', {}).get('comments', [])
+    result = []
+    for comment in comments:
+        comment['note_url'] = note_url
+        result.append(handle_comment_info(comment))
+    has_more = res_json.get('data', {}).get('has_more', False)
+    next_cursor = res_json.get('data', {}).get('cursor', '')
+    return success_response({"comments": result, "has_more": has_more, "cursor": next_cursor})
+
+
+@app.route('/api/note/comments/top', methods=['POST'])
+def api_get_note_top_comments():
+    data = request.get_json()
+    if not data or 'cookie' not in data or 'note_id' not in data or 'xsec_token' not in data:
+        return error_response('missing required fields: cookie, note_id, xsec_token')
+    cookie = data['cookie']
+    note_id = data['note_id']
+    xsec_token = data['xsec_token']
+    success, msg, comments = xhs_apis.get_note_all_out_comment(note_id, xsec_token, cookie)
+    if not success:
+        return error_response(msg)
+    note_url = f"https://www.xiaohongshu.com/explore/{note_id}?xsec_token={xsec_token}"
+    result = []
+    for comment in comments:
+        comment['note_url'] = note_url
+        result.append(handle_comment_info(comment))
+    return success_response(result)
+
+
+@app.route('/api/note/comments/all', methods=['POST'])
+def api_get_note_all_comments():
     data = request.get_json()
     if not data or 'cookie' not in data or 'note_url' not in data:
         return error_response('missing required fields: cookie, note_url')
@@ -117,4 +159,4 @@ def api_get_note_comments():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)
