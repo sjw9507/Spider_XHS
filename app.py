@@ -1,4 +1,5 @@
 # encoding: utf-8
+import urllib.parse
 from flask import Flask, request, jsonify
 from loguru import logger
 from apis.xhs_pc_apis import XHS_Apis
@@ -67,6 +68,35 @@ def api_get_user_notes():
             except Exception as e:
                 logger.warning(f'获取笔记详情失败: {e}')
     return success_response(detailed_notes)
+
+
+@app.route('/api/user/notes/page', methods=['POST'])
+def api_get_user_notes_page():
+    data = request.get_json()
+    if not data or 'cookie' not in data or 'user_url' not in data:
+        return error_response('missing required fields: cookie, user_url')
+    cookie = data['cookie']
+    user_url = data['user_url']
+    cursor = data.get('cursor', '')
+    raw = data.get('raw', False)
+    try:
+        url_parse = urllib.parse.urlparse(user_url)
+        user_id = url_parse.path.split('/')[-1]
+        query_dict = dict(urllib.parse.parse_qsl(url_parse.query))
+        xsec_token = query_dict.get('xsec_token', '')
+        xsec_source = query_dict.get('xsec_source', 'pc_search')
+    except Exception as e:
+        return error_response(f'invalid user_url: {e}')
+    success, msg, res_json = xhs_apis.get_user_note_info(user_id, cursor, cookie, xsec_token, xsec_source)
+    if not success:
+        return error_response(msg)
+    if raw:
+        return success_response(res_json)
+    res_data = res_json.get('data', {})
+    notes = res_data.get('notes', [])
+    has_more = res_data.get('has_more', False)
+    next_cursor = str(res_data.get('cursor', ''))
+    return success_response({"notes": notes, "has_more": has_more, "cursor": next_cursor})
 
 
 @app.route('/api/note/search', methods=['POST'])
