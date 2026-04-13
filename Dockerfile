@@ -1,5 +1,4 @@
-#FROM python:3.10-slim
-FROM registry.cn-shanghai.aliyuncs.com/yanfang/xhs:python-node-playwright
+FROM python:3.10-slim
 
 WORKDIR /app
 
