@@ -2,10 +2,10 @@
 
 > 实测时间：2026-04-13
 > 服务地址：`http://127.0.0.1:5000`
-> 三个接口请求时均传 `raw=true`。所有接口外层统一返回 `{ code, msg, data }`：`code=0` 表示成功，失败时 `code=-1`、`data=null`。
+> 示例请求大多传 `raw=true`。所有接口外层统一返回 `{ code, msg, data }`：`code=0` 表示成功，失败时 `code=-1`、`data=null`。
 > 下方 JSON 已精简（仅保留每类对象的 1–2 条代表数据），原始完整响应另存于 `tmp_api_results.json`（临时文件）。
 >
-> ⚠️ **关于 `raw` 字段的统一说明**：三个接口在 `raw=true` 时都直接返回**小红书原始 API JSON**，外层多一层 `success/code/msg/data` 包装。`raw=false`（默认）时 Flask 会做轻量整形，把翻页字段提到 `data` 顶层，方便直接消费。
+> ⚠️ **关于 `raw` 字段的统一说明**：各接口在 `raw=true` 时都直接返回**小红书原始 API JSON**，外层多一层 `success/code/msg/data` 包装。`raw=false`（默认）时 Flask 会做轻量整形（翻页接口把翻页字段提到 `data` 顶层；`/api/note/info` 会调用 `handle_note_info` 整形），方便直接消费。
 
 ---
 
@@ -340,18 +340,140 @@ Content-Type: application/json
 
 ---
 
+## 4. `POST /api/note/info` — 获取单篇笔记详情
+
+底层调用 `xhs_apis.get_note_info`，返回一条笔记的完整详情（图文/视频、标签、互动计数等）。
+
+### 请求
+```http
+POST /api/note/info
+Content-Type: application/json
+```
+```json
+{
+  "cookie": "<你的 cookie 字符串>",
+  "note_url": "https://www.xiaohongshu.com/explore/69c4b106000000002003a15b?xsec_token=ABYWEisRlB3NUzLrxnV1cMVfwQywNtYQ-9RW2GMJ-uNI4=&xsec_source=pc_search",
+  "raw": true
+}
+```
+
+**字段说明**
+| 字段 | 必填 | 说明 |
+|---|---|---|
+| `cookie` | 是 | 登录后的 xhs cookie 字符串 |
+| `note_url` | 是 | **必须携带 `xsec_token`**，建议带 `xsec_source`（`pc_search` / `pc_user` / `pc_feed`，缺省时内部默认 `pc_search`）。格式：`https://www.xiaohongshu.com/explore/{note_id}?xsec_token=XXX&xsec_source=pc_search` |
+| `raw` | 否 | `true` 时返回小红书原始 API JSON（外层多一层 `success/code/msg/data` 包装）；`false`（默认）时 Flask 会把 `data.items[0]` 抽出并调用 `handle_note_info` 整形 |
+
+### 响应（raw=true，精简示例）
+```json
+{
+  "code": 0,
+  "msg": "success",
+  "data": {
+    "success": true,
+    "code": 0,
+    "msg": "成功",
+    "data": {
+      "items": [
+        {
+          "id": "69c4b106000000002003a15b",
+          "model_type": "note",
+          "note_card": {
+            "type": "video",
+            "title": "春天要多吃的十道时令家常菜‼️",
+            "desc": "春天时令蔬菜真是太多了...",
+            "time": 1743004800000,
+            "ip_location": "上海",
+            "user": {
+              "user_id": "5db6fbcc0000000001000503",
+              "nickname": "张阿姨美食记",
+              "avatar": "https://sns-avatar-qc.xhscdn.com/avatar/...",
+              "xsec_token": "ABxz_zJ-ZD4mqOA2YYF2d7jyh6ZVY5-nYXG7a_bBI8OzY="
+            },
+            "interact_info": {
+              "liked": false,
+              "liked_count": "1234",
+              "collected_count": "567",
+              "comment_count": "89",
+              "share_count": "12"
+            },
+            "image_list": [
+              {"info_list": [{"image_scene": "WB_PRV", "url": "..."}, {"image_scene": "WB_DFT", "url": "..."}]}
+            ],
+            "tag_list": [
+              {"name": "春季美食", "type": "topic"}
+            ],
+            "video": {
+              "media": {"stream": {"h264": [{"master_url": "https://sns-video-bd.xhscdn.com/...", "url": "..."}]}}
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+### 响应（raw=false，`handle_note_info` 整形后）
+```json
+{
+  "code": 0,
+  "msg": "success",
+  "data": {
+    "note_id": "69c4b106000000002003a15b",
+    "note_url": "https://www.xiaohongshu.com/explore/69c4b106000000002003a15b?xsec_token=...&xsec_source=pc_search",
+    "note_type": "视频",
+    "user_id": "5db6fbcc0000000001000503",
+    "home_url": "https://www.xiaohongshu.com/user/profile/5db6fbcc0000000001000503",
+    "nickname": "张阿姨美食记",
+    "avatar": "https://sns-avatar-qc.xhscdn.com/avatar/...",
+    "title": "春天要多吃的十道时令家常菜‼️",
+    "desc": "春天时令蔬菜真是太多了...",
+    "liked_count": "1234",
+    "collected_count": "567",
+    "comment_count": "89",
+    "share_count": "12",
+    "video_cover": "https://...",
+    "video_addr": "https://sns-video-bd.xhscdn.com/...",
+    "image_list": ["https://..."],
+    "tags": ["春季美食"],
+    "upload_time": "2025-03-26 20:00:00",
+    "ip_location": "上海"
+  }
+}
+```
+
+**字段路径说明**
+| 字段 | raw=true（原生） | raw=false（整形后） |
+|---|---|---|
+| 笔记主体 | `data.data.items[0].note_card` | `data` 顶层 |
+| 笔记类型 | `note_card.type`：`normal` / `video` | `note_type`：`图集` / `视频` |
+| 发布时间 | `note_card.time`（epoch 毫秒） | `upload_time`（`YYYY-MM-DD HH:MM:SS`） |
+| 图片 | `note_card.image_list[].info_list[]` | `image_list[]`（取 `info_list[1].url`） |
+| 视频地址 | `note_card.video.media.stream.h264[0].master_url` | `video_addr` |
+| 标签 | `note_card.tag_list[].name` | `tags[]` |
+| 互动计数 | `note_card.interact_info.*_count`（字符串数字） | `liked_count` / `collected_count` / `comment_count` / `share_count`（字符串数字） |
+
+- `note_url` 的 `xsec_token` / `xsec_source` 必须有效，否则小红书直接返回空 items
+- `raw=false` 时若笔记结构异常（如没 `title`/`image_list`），会走 `error_response` 返回 `code=-1`
+- `note_url` 可由搜索/用户笔记接口返回的 `note_id` + `xsec_token` 拼出：`https://www.xiaohongshu.com/explore/{note_id}?xsec_token={xsec_token}&xsec_source=pc_search`
+
+---
+
 ## 级联调用示例
 
-典型串联流程（对应上面 3 个接口的依赖关系）：
+典型串联流程（对应上面 4 个接口的依赖关系）：
 
 ```
 [1] 搜索:  /api/note/search  (query, page)
         ↓ raw=false: data.notes[i].id + data.notes[i].xsec_token       → note_id / 笔记 xsec_token
         ↓           data.notes[i].note_card.user.user_id + .xsec_token → user_id / 用户 xsec_token
         ↓ has_more=true 时把 page+1 再请求继续翻页
-[2] 评论:  /api/note/comments/page  (note_id, xsec_token, cursor)
+[2] 笔记详情:  /api/note/info  (note_url)
+        note_url = https://www.xiaohongshu.com/explore/{note_id}?xsec_token={note_xsec}&xsec_source=pc_search
+[3] 评论:  /api/note/comments/page  (note_id, xsec_token, cursor)
         ↓ has_more=true 时把上次返回的 cursor 透传到下次
-[3] 用户笔记:  /api/user/notes/page  (user_url, cursor)
+[4] 用户笔记:  /api/user/notes/page  (user_url, cursor)
         user_url = https://www.xiaohongshu.com/user/profile/{user_id}?xsec_token={user_xsec}&xsec_source=pc_search
         ↓ has_more=true 时把上次返回的 cursor 透传到下次
 ```
