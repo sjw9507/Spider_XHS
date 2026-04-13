@@ -19,9 +19,18 @@ def error_response(msg):
 
 @app.route('/api/note/info', methods=['POST'])
 def api_get_note_info():
+    """
+    获取单篇笔记详情。
+    Body:
+      cookie (str, required)
+      note_url (str, required) — 必须携带 xsec_token，建议带 xsec_source。
+        格式: https://www.xiaohongshu.com/explore/{note_id}?xsec_token=XXX&xsec_source=pc_search
+        xsec_source 可选值: pc_search / pc_user / pc_feed (默认 pc_search)
+      raw (bool, optional) — true 返回原始 JSON
+    """
     data = request.get_json()
     if not data or 'cookie' not in data or 'note_url' not in data:
-        return error_response('missing required fields: cookie, note_url')
+        return error_response('missing required fields: cookie, note_url (note_url must carry xsec_token)')
     cookie = data['cookie']
     note_url = data['note_url']
     raw = data.get('raw', False)
@@ -41,9 +50,19 @@ def api_get_note_info():
 
 @app.route('/api/user/notes', methods=['POST'])
 def api_get_user_notes():
+    """
+    获取指定用户的全部笔记（自动翻页直到结束）。
+    Body:
+      cookie (str, required)
+      user_url (str, required) — 必须携带 xsec_token，建议带 xsec_source。
+        格式: https://www.xiaohongshu.com/user/profile/{user_id}?xsec_token=XXX&xsec_source=pc_search
+        xsec_source 缺省时内部默认为 pc_search
+      detail (bool, optional) — true 则对每条笔记再调用详情接口
+      raw (bool, optional) — detail=true 时，true 返回原始 JSON
+    """
     data = request.get_json()
     if not data or 'cookie' not in data or 'user_url' not in data:
-        return error_response('missing required fields: cookie, user_url')
+        return error_response('missing required fields: cookie, user_url (user_url must carry xsec_token)')
     cookie = data['cookie']
     user_url = data['user_url']
     detail = data.get('detail', False)
@@ -72,9 +91,20 @@ def api_get_user_notes():
 
 @app.route('/api/user/notes/page', methods=['POST'])
 def api_get_user_notes_page():
+    """
+    分页获取指定用户的笔记（由调用方控制翻页，单页固定 30 条）。
+    Body:
+      cookie (str, required)
+      user_url (str, required) — 必须携带 xsec_token，建议带 xsec_source。
+        格式: https://www.xiaohongshu.com/user/profile/{user_id}?xsec_token=XXX&xsec_source=pc_search
+        xsec_source 缺省时内部默认为 pc_search
+      cursor (str, optional) — 首次请求传 "" 或省略；后续传上一次返回的 cursor
+      raw (bool, optional) — true 返回原始 JSON
+    Response data: { notes, has_more, cursor }
+    """
     data = request.get_json()
     if not data or 'cookie' not in data or 'user_url' not in data:
-        return error_response('missing required fields: cookie, user_url')
+        return error_response('missing required fields: cookie, user_url (user_url must carry xsec_token)')
     cookie = data['cookie']
     user_url = data['user_url']
     cursor = data.get('cursor', '')
@@ -101,6 +131,18 @@ def api_get_user_notes_page():
 
 @app.route('/api/note/search', methods=['POST'])
 def api_search_note():
+    """
+    关键词搜索笔记。
+    Body:
+      cookie (str, required)
+      query (str, required) — 搜索关键词
+      require_num (int, required) — 期望返回的笔记数量
+      sort (int, optional) — 排序方式 0 综合 / 1 最新 / 2 最热 (默认 0)
+      note_type (int, optional) — 笔记类型 0 全部 / 1 视频 / 2 图文 (默认 0)
+      detail (bool, optional) — true 则对每条结果再拉详情
+        (内部会用 note['xsec_token'] 拼出 explore URL)
+      raw (bool, optional) — detail=true 时，true 返回原始 JSON
+    """
     data = request.get_json()
     if not data or 'cookie' not in data or 'query' not in data or 'require_num' not in data:
         return error_response('missing required fields: cookie, query, require_num')
@@ -136,6 +178,16 @@ def api_search_note():
 
 @app.route('/api/note/comments/page', methods=['POST'])
 def api_get_note_comments_page():
+    """
+    分页获取单篇笔记的一级评论（由调用方控制翻页）。
+    Body:
+      cookie (str, required)
+      note_id (str, required) — 笔记 ID（explore URL 路径最后一段）
+      xsec_token (str, required) — 与该笔记关联的 xsec_token
+      cursor (str, optional) — 首次传 "" 或省略；后续传上一次返回的 cursor
+      raw (bool, optional) — true 返回原始 JSON
+    Response data: { comments, has_more, cursor }
+    """
     data = request.get_json()
     if not data or 'cookie' not in data or 'note_id' not in data or 'xsec_token' not in data:
         return error_response('missing required fields: cookie, note_id, xsec_token')
@@ -162,6 +214,14 @@ def api_get_note_comments_page():
 
 @app.route('/api/note/comments/top', methods=['POST'])
 def api_get_note_top_comments():
+    """
+    获取单篇笔记的全部一级评论（自动翻页，不含子评论）。
+    Body:
+      cookie (str, required)
+      note_id (str, required) — 笔记 ID（explore URL 路径最后一段）
+      xsec_token (str, required) — 与该笔记关联的 xsec_token
+      raw (bool, optional) — true 返回原始列表
+    """
     data = request.get_json()
     if not data or 'cookie' not in data or 'note_id' not in data or 'xsec_token' not in data:
         return error_response('missing required fields: cookie, note_id, xsec_token')
@@ -184,9 +244,18 @@ def api_get_note_top_comments():
 
 @app.route('/api/note/comments/all', methods=['POST'])
 def api_get_note_all_comments():
+    """
+    获取单篇笔记的全部评论（含子评论，自动翻页）。
+    Body:
+      cookie (str, required)
+      note_url (str, required) — 必须携带 xsec_token。
+        格式: https://www.xiaohongshu.com/explore/{note_id}?xsec_token=XXX
+        (本接口内部只解析 xsec_token，xsec_source 不使用)
+      raw (bool, optional) — true 返回原始列表
+    """
     data = request.get_json()
     if not data or 'cookie' not in data or 'note_url' not in data:
-        return error_response('missing required fields: cookie, note_url')
+        return error_response('missing required fields: cookie, note_url (note_url must carry xsec_token)')
     cookie = data['cookie']
     note_url = data['note_url']
     raw = data.get('raw', False)
