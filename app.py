@@ -132,48 +132,45 @@ def api_get_user_notes_page():
 @app.route('/api/note/search', methods=['POST'])
 def api_search_note():
     """
-    关键词搜索笔记。
+    关键词搜索笔记（单页，由调用方控制翻页）。
     Body:
       cookie (str, required)
       query (str, required) — 搜索关键词
-      require_num (int, required) — 期望返回的笔记数量
-      sort (int, optional) — 排序方式 0 综合 / 1 最新 / 2 最热 (默认 0)
+      page (int, optional) — 页码，默认 1；由调用方控制翻页
+      sort (int, optional) — 排序方式 0 综合 / 1 最新 / 2 最多点赞 / 3 最多评论 / 4 最多收藏 (默认 0)
       note_type (int, optional) — 笔记类型 0 全部 / 1 视频 / 2 图文 (默认 0)
-      detail (bool, optional) — true 则对每条结果再拉详情
-        (内部会用 note['xsec_token'] 拼出 explore URL)
-      raw (bool, optional) — detail=true 时，true 返回原始 JSON
+      note_time (int, optional) — 发布时间 0 不限 / 1 一天内 / 2 一周内 / 3 半年内 (默认 0)
+      note_range (int, optional) — 笔记范围 0 不限 / 1 已看过 / 2 未看过 / 3 已关注 (默认 0)
+      pos_distance (int, optional) — 位置距离 0 不限 / 1 同城 / 2 附近（=1/2 时必须传 geo）(默认 0)
+      geo (dict, optional) — 地理位置对象，pos_distance 非 0 时必填
+      raw (bool, optional) — true 返回小红书原始 JSON
+    Response data (raw=false): { notes, has_more }
     """
     data = request.get_json()
-    if not data or 'cookie' not in data or 'query' not in data or 'require_num' not in data:
-        return error_response('missing required fields: cookie, query, require_num')
+    if not data or 'cookie' not in data or 'query' not in data:
+        return error_response('missing required fields: cookie, query')
     cookie = data['cookie']
     query = data['query']
-    require_num = data['require_num']
+    page = data.get('page', 1)
     sort = data.get('sort', 0)
     note_type = data.get('note_type', 0)
-    detail = data.get('detail', False)
+    note_time = data.get('note_time', 0)
+    note_range = data.get('note_range', 0)
+    pos_distance = data.get('pos_distance', 0)
+    geo = data.get('geo', "")
     raw = data.get('raw', False)
-    success, msg, notes = xhs_apis.search_some_note(query, require_num, cookie, sort, note_type)
+    if pos_distance and not geo:
+        return error_response('geo is required when pos_distance is set')
+    success, msg, res_json = xhs_apis.search_note(query, cookie, page, sort, note_type, note_time, note_range, pos_distance, geo)
     if not success:
         return error_response(msg)
-    notes = [n for n in notes if n.get('model_type') == 'note']
-    if not detail:
-        return success_response(notes)
-    detailed_notes = []
-    for note in notes:
-        note_url = f"https://www.xiaohongshu.com/explore/{note['id']}?xsec_token={note['xsec_token']}"
-        s, m, res_json = xhs_apis.get_note_info(note_url, cookie)
-        if s:
-            if raw:
-                detailed_notes.append(res_json)
-                continue
-            try:
-                note_data = res_json['data']['items'][0]
-                note_data['url'] = note_url
-                detailed_notes.append(handle_note_info(note_data))
-            except Exception as e:
-                logger.warning(f'获取笔记详情失败: {e}')
-    return success_response(detailed_notes)
+    if raw:
+        return success_response(res_json)
+    res_data = res_json.get('data', {})
+    items = res_data.get('items', [])
+    notes = [n for n in items if n.get('model_type') == 'note']
+    has_more = res_data.get('has_more', False)
+    return success_response({"notes": notes, "has_more": has_more})
 
 
 @app.route('/api/note/comments/page', methods=['POST'])

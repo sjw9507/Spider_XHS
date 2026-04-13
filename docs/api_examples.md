@@ -5,9 +5,7 @@
 > 三个接口请求时均传 `raw=true`。所有接口外层统一返回 `{ code, msg, data }`：`code=0` 表示成功，失败时 `code=-1`、`data=null`。
 > 下方 JSON 已精简（仅保留每类对象的 1–2 条代表数据），原始完整响应另存于 `tmp_api_results.json`（临时文件）。
 >
-> ⚠️ **关于 `raw` 字段的特殊说明**
-> - `/api/note/comments/page`、`/api/user/notes/page`：`raw=true` 时返回**小红书原始 API JSON**（外层多一层 `success/code/msg/data` 包装）。
-> - `/api/note/search`：`raw` **仅在 `detail=true` 时生效**（控制详情接口的返回形态）；当 `detail=false`（默认）时，`raw=true` 与 `raw=false` 返回内容完全一致——都是后端过滤掉非 note 后的搜索结果列表。下方示例为 `detail=false, raw=true` 的实际返回。
+> ⚠️ **关于 `raw` 字段的统一说明**：三个接口在 `raw=true` 时都直接返回**小红书原始 API JSON**，外层多一层 `success/code/msg/data` 包装。`raw=false`（默认）时 Flask 会做轻量整形，把翻页字段提到 `data` 顶层，方便直接消费。
 
 ---
 
@@ -104,7 +102,9 @@ Content-Type: application/json
 
 ---
 
-## 2. `POST /api/note/search` — 关键词搜索笔记
+## 2. `POST /api/note/search` — 关键词搜索笔记（单页）
+
+底层调用 `xhs_apis.search_note`，**单页返回**，由调用方自己控制翻页（不再自动拉满 `require_num`）。
 
 ### 请求
 ```http
@@ -115,7 +115,13 @@ Content-Type: application/json
 {
   "cookie": "<你的 cookie 字符串>",
   "query": "美食",
-  "require_num": 2,
+  "page": 1,
+  "sort": 0,
+  "note_type": 0,
+  "note_time": 0,
+  "note_range": 0,
+  "pos_distance": 0,
+  "geo": "",
   "raw": true
 }
 ```
@@ -125,73 +131,103 @@ Content-Type: application/json
 |---|---|---|
 | `cookie` | 是 | 登录后的 xhs cookie 字符串 |
 | `query` | 是 | 搜索关键词 |
-| `require_num` | 是 | 期望返回的笔记数量（内部自动翻页拉满） |
+| `page` | 否 | 页码，默认 1；想翻页就递增（小红书页大小约 20） |
 | `sort` | 否 | 排序：0 综合 / 1 最新 / 2 最多点赞 / 3 最多评论 / 4 最多收藏（默认 0） |
 | `note_type` | 否 | 0 全部 / 1 视频 / 2 图文（默认 0） |
-| `detail` | 否 | `true` 时对每条结果再调详情接口（更慢） |
-| `raw` | 否 | **仅在 `detail=true` 时生效**——控制详情子调用的返回形态 |
+| `note_time` | 否 | 发布时间：0 不限 / 1 一天内 / 2 一周内 / 3 半年内（默认 0） |
+| `note_range` | 否 | 笔记范围：0 不限 / 1 已看过 / 2 未看过 / 3 已关注（默认 0） |
+| `pos_distance` | 否 | 位置距离：0 不限 / 1 同城 / 2 附近（默认 0；非 0 时必须同时传 `geo`） |
+| `geo` | 否 | 地理位置对象，`pos_distance` 非 0 时必填，会被序列化为 JSON 透传 |
+| `raw` | 否 | `true` 时返回小红书原始 API JSON（外层多一层 `success/code/msg/data` 包装） |
 
-> ⚠️ 当 `detail=false`（默认）时，本接口直接返回搜索结果列表，`raw` 不生效；下方为本次 `detail=false, raw=true` 的实测返回。
-
-### 响应（实测精简）
+### 响应（raw=true，单条 item 示例）
 ```json
 {
   "code": 0,
   "msg": "success",
-  "data": [
-    {
-      "id": "69c4b106000000002003a15b",
-      "model_type": "note",
-      "xsec_token": "ABYWEisRlB3NUzLrxnV1cMVfwQywNtYQ-9RW2GMJ-uNI4=",
-      "note_card": {
-        "type": "video",
-        "display_title": "春天要多吃的十道时令家常菜‼️",
-        "corner_tag_info": [
-          {"text": "03-26", "type": "publish_time"}
-        ],
-        "cover": {
-          "width": 1080,
-          "height": 1920,
-          "url_default": "http://sns-webpic-qc.xhscdn.com/.../1040g00831u5ombgbia70...!nc_n_webp_mw_1",
-          "url_pre": "http://sns-webpic-qc.xhscdn.com/.../1040g00831u5ombgbia70...!nc_n_webp_prv_1"
-        },
-        "image_list": [
-          {
-            "width": 1080,
-            "height": 1920,
-            "info_list": [
-              {"image_scene": "WB_DFT", "url": "..."},
-              {"image_scene": "WB_PRV", "url": "..."}
-            ]
+  "data": {
+    "success": true,
+    "code": 0,
+    "msg": "成功",
+    "data": {
+      "items": [
+        {
+          "id": "69c4b106000000002003a15b",
+          "model_type": "note",
+          "xsec_token": "ABYWEisRlB3NUzLrxnV1cMVfwQywNtYQ-9RW2GMJ-uNI4=",
+          "note_card": {
+            "type": "video",
+            "display_title": "春天要多吃的十道时令家常菜‼️",
+            "corner_tag_info": [
+              {"text": "03-26", "type": "publish_time"}
+            ],
+            "cover": {
+              "width": 1080,
+              "height": 1920,
+              "url_default": "http://sns-webpic-qc.xhscdn.com/.../1040g00831u5ombgbia70...!nc_n_webp_mw_1",
+              "url_pre": "http://sns-webpic-qc.xhscdn.com/.../1040g00831u5ombgbia70...!nc_n_webp_prv_1"
+            },
+            "image_list": [
+              {
+                "width": 1080,
+                "height": 1920,
+                "info_list": [
+                  {"image_scene": "WB_DFT", "url": "..."},
+                  {"image_scene": "WB_PRV", "url": "..."}
+                ]
+              }
+            ],
+            "interact_info": {
+              "liked": false,
+              "liked_count": "1049",
+              "collected": false,
+              "collected_count": "811",
+              "comment_count": "7",
+              "shared_count": "493"
+            },
+            "user": {
+              "user_id": "625520e80000000010008699",
+              "nickname": "厨神妈妈的美食日记",
+              "nick_name": "厨神妈妈的美食日记",
+              "avatar": "https://sns-avatar-qc.xhscdn.com/avatar/1040g2jo31fmrk4pt046g5oil43k411kp5mkg7l0?imageView2/2/w/80/format/jpg",
+              "xsec_token": "ABRLufjWQ2BD-6Uj2CwWdjjqwwGG3LmqWQAXf1Xf8laYA="
+            }
           }
-        ],
-        "interact_info": {
-          "liked": false,
-          "liked_count": "1049",
-          "collected": false,
-          "collected_count": "811",
-          "comment_count": "7",
-          "shared_count": "493"
-        },
-        "user": {
-          "user_id": "625520e80000000010008699",
-          "nickname": "厨神妈妈的美食日记",
-          "nick_name": "厨神妈妈的美食日记",
-          "avatar": "https://sns-avatar-qc.xhscdn.com/avatar/1040g2jo31fmrk4pt046g5oil43k411kp5mkg7l0?imageView2/2/w/80/format/jpg",
-          "xsec_token": "ABRLufjWQ2BD-6Uj2CwWdjjqwwGG3LmqWQAXf1Xf8laYA="
         }
-      }
+      ],
+      "has_more": true
     }
-  ]
+  }
 }
 ```
 
-**字段说明**
-- `data` 是列表，元素是 `model_type=note` 的搜索结果（后端已过滤掉非 note 推广位）
-- 元素顶层 `id` + `xsec_token` → 笔记的 `note_id` / `xsec_token`，可直接喂给 `/api/note/comments/page`
+> raw 模式下原始 items 中可能混有非 note 的推广位（`model_type != 'note'`），需要自行过滤；`raw=false` 模式下 Flask 已自动过滤。
+
+### 响应（raw=false，整形后）
+```json
+{
+  "code": 0,
+  "msg": "success",
+  "data": {
+    "notes": [
+      {"id": "...", "model_type": "note", "xsec_token": "...", "note_card": {"...": "..."}}
+    ],
+    "has_more": true
+  }
+}
+```
+
+**字段路径说明**
+| 字段 | raw=true（原生） | raw=false（整形后） |
+|---|---|---|
+| 列表 | `data.data.items[]`（含非 note 推广位） | `data.notes[]`（已过滤 `model_type=='note'`） |
+| 是否还有下一页 | `data.data.has_more` | `data.has_more` |
+
+- item 顶层 `id` + `xsec_token` → 笔记的 `note_id` / `xsec_token`，可直接喂给 `/api/note/comments/page`
 - `note_card.user.user_id` + `note_card.user.xsec_token` → 作者的 `user_id` 和**用户级 `xsec_token`**，可拼 `user_url` 喂给 `/api/user/notes/page`
 - `note_card.type`：`normal`（图文）/ `video`
-- `note_card.interact_info` 字段都是字符串数字
+- `note_card.interact_info` 各 count 都是字符串数字
+- 翻页：`has_more=true` 时把请求里的 `page` 加 1 再请求
 
 ---
 
@@ -309,10 +345,13 @@ Content-Type: application/json
 典型串联流程（对应上面 3 个接口的依赖关系）：
 
 ```
-[1] 搜索:  /api/note/search  (query, require_num)
-        ↓ 从 data[i].id + data[i].xsec_token 得到 note_id / 笔记 xsec_token
-        ↓ 从 data[i].note_card.user.user_id + note_card.user.xsec_token 得到用户 xsec_token
+[1] 搜索:  /api/note/search  (query, page)
+        ↓ raw=false: data.notes[i].id + data.notes[i].xsec_token       → note_id / 笔记 xsec_token
+        ↓           data.notes[i].note_card.user.user_id + .xsec_token → user_id / 用户 xsec_token
+        ↓ has_more=true 时把 page+1 再请求继续翻页
 [2] 评论:  /api/note/comments/page  (note_id, xsec_token, cursor)
+        ↓ has_more=true 时把上次返回的 cursor 透传到下次
 [3] 用户笔记:  /api/user/notes/page  (user_url, cursor)
         user_url = https://www.xiaohongshu.com/user/profile/{user_id}?xsec_token={user_xsec}&xsec_source=pc_search
+        ↓ has_more=true 时把上次返回的 cursor 透传到下次
 ```
