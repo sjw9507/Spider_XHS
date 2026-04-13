@@ -1,0 +1,38 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+.claude
+
+# Python
+.venv
+venv
+env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.egg-info
+.pytest_cache
+.mypy_cache
+
+# Node
+node_modules
+npm-debug.log
+
+# Env / secrets
+.env
+.env.*
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Project artifacts (note: static/ is required at runtime — do NOT ignore)
+docs
+author
+README.md
+*.log

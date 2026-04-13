@@ -23,9 +23,12 @@ def api_get_note_info():
         return error_response('missing required fields: cookie, note_url')
     cookie = data['cookie']
     note_url = data['note_url']
+    raw = data.get('raw', False)
     success, msg, res_json = xhs_apis.get_note_info(note_url, cookie)
     if not success:
         return error_response(msg)
+    if raw:
+        return success_response(res_json)
     try:
         note_data = res_json['data']['items'][0]
         note_data['url'] = note_url
@@ -43,6 +46,7 @@ def api_get_user_notes():
     cookie = data['cookie']
     user_url = data['user_url']
     detail = data.get('detail', False)
+    raw = data.get('raw', False)
     success, msg, note_list = xhs_apis.get_user_all_notes(user_url, cookie)
     if not success:
         return error_response(msg)
@@ -53,6 +57,9 @@ def api_get_user_notes():
         note_url = f"https://www.xiaohongshu.com/explore/{note['note_id']}?xsec_token={note['xsec_token']}"
         s, m, res_json = xhs_apis.get_note_info(note_url, cookie)
         if s:
+            if raw:
+                detailed_notes.append(res_json)
+                continue
             try:
                 note_data = res_json['data']['items'][0]
                 note_data['url'] = note_url
@@ -73,6 +80,7 @@ def api_search_note():
     sort = data.get('sort', 0)
     note_type = data.get('note_type', 0)
     detail = data.get('detail', False)
+    raw = data.get('raw', False)
     success, msg, notes = xhs_apis.search_some_note(query, require_num, cookie, sort, note_type)
     if not success:
         return error_response(msg)
@@ -84,6 +92,9 @@ def api_search_note():
         note_url = f"https://www.xiaohongshu.com/explore/{note['id']}?xsec_token={note['xsec_token']}"
         s, m, res_json = xhs_apis.get_note_info(note_url, cookie)
         if s:
+            if raw:
+                detailed_notes.append(res_json)
+                continue
             try:
                 note_data = res_json['data']['items'][0]
                 note_data['url'] = note_url
@@ -102,9 +113,12 @@ def api_get_note_comments_page():
     note_id = data['note_id']
     xsec_token = data['xsec_token']
     cursor = data.get('cursor', '')
+    raw = data.get('raw', False)
     success, msg, res_json = xhs_apis.get_note_out_comment(note_id, cursor, xsec_token, cookie)
     if not success:
         return error_response(msg)
+    if raw:
+        return success_response(res_json)
     note_url = f"https://www.xiaohongshu.com/explore/{note_id}?xsec_token={xsec_token}"
     comments = res_json.get('data', {}).get('comments', [])
     result = []
@@ -124,9 +138,12 @@ def api_get_note_top_comments():
     cookie = data['cookie']
     note_id = data['note_id']
     xsec_token = data['xsec_token']
+    raw = data.get('raw', False)
     success, msg, comments = xhs_apis.get_note_all_out_comment(note_id, xsec_token, cookie)
     if not success:
         return error_response(msg)
+    if raw:
+        return success_response(comments)
     note_url = f"https://www.xiaohongshu.com/explore/{note_id}?xsec_token={xsec_token}"
     result = []
     for comment in comments:
@@ -142,9 +159,12 @@ def api_get_note_all_comments():
         return error_response('missing required fields: cookie, note_url')
     cookie = data['cookie']
     note_url = data['note_url']
+    raw = data.get('raw', False)
     success, msg, comments = xhs_apis.get_note_all_comment(note_url, cookie)
     if not success:
         return error_response(msg)
+    if raw:
+        return success_response(comments)
     result = []
     for comment in comments:
         comment['note_url'] = note_url
