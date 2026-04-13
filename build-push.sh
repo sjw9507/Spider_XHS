@@ -18,3 +18,6 @@ echo ">>> Pushing $FULL_IMAGE ..."
 docker push $FULL_IMAGE
 
 echo ">>> Done: $FULL_IMAGE"
+
+echo "按任意键退出..."
+read -n 1 -s  # 等待读取一个字符，且不在屏幕上回显
